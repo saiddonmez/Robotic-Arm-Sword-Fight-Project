@@ -1,63 +1,48 @@
-import rai
+import robotic as ry
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import gymnasium as gym
-import gymnasium_robotics as gymr
 from torch.utils.data import DataLoader
+import os
+import numpy as np
+from ddpgCode.model import Actor, Critic
 
-class AttackModel(nn.Module):
-    def __init__(self):
-        super(AttackModel, self).__init__()
-        self.fc1 = nn.Linear(100, 50)
-        self.fc2 = nn.Linear(50, 25)
-        self.fc3 = nn.Linear(25, 7)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
-
-class DefenceModel(nn.Module):
-    def __init__(self):
-        super(AttackModel, self).__init__()
-        self.fc1 = nn.Linear(100, 50)
-        self.fc2 = nn.Linear(50, 25)
-        self.fc3 = nn.Linear(25, 7)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
-def loadPathData(file):
-    # load data from file
-    data = torch.load(file)
-    return data
-
-def generateTrainLoader(data, batch_size=64):
-    # generate data loader with batch size 32
-    trainLoader = DataLoader(data, batch_size, shuffle=True)
-    return trainLoader
+def load_data(folder):
+    datas = []
+    for path in os.listdir(folder):
+        if path.endswith('.npy'):
+            path = np.load(os.path.join(folder, path))
+            for i in range(len(path)-1):
+                state = path[i]
+                goal = path[i+1]
+                datas.append((state, goal))
+    return np.array(datas)
     
-
-def trainModel(trainLoader, epochs=10, lr=0.01):
-    # train the model
-    model = AttackModel()
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+def train(model, dataLoader, optimizer, epochs=100):
+    model.train()
     for epoch in range(epochs):
-        for i, data in enumerate(trainLoader):
-            inputs, labels = data
+        for i, (state, goal) in enumerate(dataLoader):
+            state = state.to(device)
+            goal = goal.to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            action = model(state)
+            
+            loss = F.mse_loss(output, goal)
             loss.backward()
             optimizer.step()
-            print(f'Epoch: {epoch}, Batch: {i}, Loss: {loss.item()}')
-    return model
+            if i % 100 == 0:
+                print('Epoch: {}/{}, Iter: {}/{}, Loss: {}'.format(epoch, epochs, i, len(dataLoader), loss.item()))
+
+datas = load_data('real_spline_attackPaths')
+np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
+print(np.min(datas[:,0,0,:], axis=0))
+print(np.max(datas[:,0,0,:], axis=0))
+
+print(np.min(datas[:,0,1,:], axis=0))
+print(np.max(datas[:,0,1,:], axis=0))
+#attackModel = Actor(28,7,400,300,0.003).to(device)
+
 
