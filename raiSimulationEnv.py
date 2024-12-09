@@ -13,7 +13,7 @@ C.view()
 initialFrameState = C.getFrameState()
 qhome = C.getJointState()
 q0 = qhome
-armed = np.load('../armed.npy')
+armed = np.load('armed.npy')
 
 def simulationCloseGrippers(S, tau=0.01):
     S.closeGripper('l_gripper', width=0.0001, speed=0.5)
@@ -135,6 +135,14 @@ def findCollision(C,object1):
     else:
         return False
     
+def findRewardingCollision(C,object1):
+    collisions = [col for col in C.getCollisions(0) if object1 in col and col[1].startswith('r_') or col[0].startswith('r_')]
+    if len(collisions) > 0:
+        return True
+    else:
+        return False
+    
+    
 # Use this code. It is awesome. It will follow the path and stop if there is a collision.    
 def followSplinePath(S,path,t,tau=0.01):
     """
@@ -214,8 +222,9 @@ class RobotSimEnv(gym.Env):
         self.simulation = initalizeSimulation()
         """Reset the environment to an initial state."""
         self.current_steps = 0
+        self.initial_state = initial_state
         if initial_state is not None:
-            self.simulationGoTo(self.simulation, initial_state)
+            simulationGoTo(self.simulation, initial_state[:14])
             self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
         else:
             self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
@@ -230,21 +239,29 @@ class RobotSimEnv(gym.Env):
         # Clip the action to ensure it stays within the action space bounds
         action = np.clip(action, self.action_space.low, self.action_space.high)
         
+        action = np.concatenate([action, self.initial_state[7:14]])
         # Update the state based on the action
         self.simulation.step(action, 0.01, ry.ControlMode.position)
-
         self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
 
-        if target:
+        if target is not None:
             # Calculate the distance to the target
             distance_to_target = np.linalg.norm(self.state - target)
 
-        # Reward is the negative distance to the target
-        reward = -distance_to_target
+            # Reward is the negative distance to the target
+            reward = -distance_to_target
+            print("reward: ",reward)
         
+        else:
+            # only give reward if sword collides with objects starting with r_
+            if findRewardingCollision(C, 'sword_1'):
+                reward = 1
+            else:
+                reward = 0
+
         # Check if the agent reached the target (within a small threshold)
-        done = distance_to_target < 0.1 or self.current_steps >= self.max_steps
-        
+        done = findCollision(C, 'sword_1')
+        print("done : ",done)
         # Info dictionary (optional)
         info = {}
         
@@ -253,7 +270,9 @@ class RobotSimEnv(gym.Env):
     def render(self, mode='human'):
         """Render the environment (print the current state)."""
         C.view()
+        time.sleep(0.01)
 
     def close(self):
         """Clean up resources (optional)."""
-        pass
+        del S
+        del C

@@ -1,5 +1,5 @@
 
-import gym
+import gymnasium as gym
 
 # https://github.com/openai/gym/blob/master/gym/core.py
 class NormalizedEnv(gym.ActionWrapper):
