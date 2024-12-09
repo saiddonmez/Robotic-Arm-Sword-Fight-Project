@@ -72,24 +72,29 @@ if __name__ == "__main__":
     agent = DDPG(nb_states, nb_actions, args)
     evaluate = Evaluator(args.validate_episodes, args.validate_steps, args.output, max_episode_length=args.max_episode_length)
 
-    for episode in range(len(allPaths)):
-        path = allPaths[episode]
-        observation = env.reset(path[0])
-        for i in range(len(path)-1):
-            if episode <= args.warmup:
-                action = agent.random_action()
-            else:
-                action = agent.select_action(observation)
-            
-            print('action: ', action)
-            next_observation, reward, done, info = env.step(action, path[i+1])
-            env.render()
-            agent.memory.append(observation, action, reward, done)
-            observation = next_observation
+    for epoch in range(10):
+        for episode in range(len(allPaths)):
+            path = allPaths[episode]
+            observation = env.reset(path[0])
+            for i in range(len(path)-1):
+                if episode <= args.warmup:
+                    action = agent.random_action()
+                else:
+                    action = agent.select_action(observation)
+                
+                print('action: ', action)
+                next_observation, reward, done, info = env.step(action, path[i+1])
+                env.render()
+                agent.memory.append(observation, action, reward, done)
+                observation = next_observation
 
-            if episode > args.warmup:
-                agent.update_policy()
+                if episode > args.warmup:
+                    agent.update_policy()
 
-            if done:
-                break
+                if done:
+                    break
 
+            if episode % 100 == 99:
+                print('Episode: {}, Reward: {}'.format(episode, reward))
+                agent.save_model(args.output)
+                evaluate.evaluate(agent, env, epoch, episode)

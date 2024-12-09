@@ -15,42 +15,47 @@ qhome = C.getJointState()
 q0 = qhome
 armed = np.load('armed.npy')
 
-def simulationCloseGrippers(S, tau=0.01):
-    S.closeGripper('l_gripper', width=0.0001, speed=0.5)
+def simulationCloseGrippers(S, tau=0.01, render=True):
+    S.closeGripper('l_gripper', width=0.0001, speed=1)
     while (not S.getGripperIsGrasping('l_gripper')) and (S.getGripperWidth('l_gripper') > 0.001):
-        time.sleep(tau)
         S.step([], tau, ry.ControlMode.none)
-        C.view()
-    
-    S.closeGripper('r_gripper', width=0.0001, speed=0.5)
+        if render:
+            C.view()
+            time.sleep(tau)
+
+    S.closeGripper('r_gripper', width=0.0001, speed=1)
     while (not S.getGripperIsGrasping('r_gripper')) and (S.getGripperWidth('r_gripper') > 0.001):
-        time.sleep(tau)
         S.step([], tau, ry.ControlMode.none)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
 
-
-def simulationOpenGrippers(S, tau=0.01):
+def simulationOpenGrippers(S, tau=0.01, render=True):
     S.openGripper('l_gripper', width=0.05, speed=0.5)
     while S.getGripperWidth('l_gripper') < 0.05 - 0.01:
-        time.sleep(tau)
         S.step([], tau, ry.ControlMode.none)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
     S.openGripper('r_gripper', width=0.05, speed=0.5)
     while S.getGripperWidth('r_gripper') < 0.05 - 0.01:
-        time.sleep(tau)
         S.step([], tau, ry.ControlMode.none)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
 
-def simulationGoTo(S, q, tau=0.01, checkCol=False):
+def simulationGoTo(S, q, tau=0.01, checkCol=False, render=True):
     checkColTime = 0.1
     timer = 0
     while np.linalg.norm(S.get_q() - q) > 0.01:
-        time.sleep(tau)
         S.step(q, tau, ry.ControlMode.position)
         timer += tau
-        C.view()
-        if timer > 4:
-            print("Target cannot be reached within 4 seconds.")
+        if render:
+            C.view()
+            time.sleep(tau)
+
+        if timer > 2:
+            print("Target cannot be reached within 2 seconds.")
             break
         if checkCol:
             if timer > checkColTime:
@@ -59,31 +64,33 @@ def simulationGoTo(S, q, tau=0.01, checkCol=False):
                 else:
                     checkColTime += 0.1
 
-def simulationGoHome(S, tau=0.01):
+def simulationGoHome(S, tau=0.01, render=True):
     checkColTime = 0.1
     timer = 0
     while np.linalg.norm(S.get_q() - q0) > 0.01:
-        time.sleep(tau)
         S.step(q0, tau, ry.ControlMode.position)
-        C.view()
         timer += tau
+        if render:
+            C.view()
+            time.sleep(tau)
         # if timer > checkColTime:
         #     if findCollision(C, 'sword_1'):
         #         break
         #     else:
         #         checkColTime += 0.1
             
-def simulationFollowPath(S, path, tau=0.01):
+def simulationFollowPath(S, path, tau=0.01, render=True):
     checkColTime = 0.1
     timer = 0
     for i in range(len(path)):
         while np.linalg.norm(S.get_q() - path[i]) > 0.3:
-            time.sleep(tau)
             print(i)
             print(np.linalg.norm(S.get_q() - path[i]))
             S.step(path[i], tau, ry.ControlMode.position)
-            C.view()
             timer += tau
+            if render:
+                C.view()
+                time.sleep(tau)
             if timer > checkColTime:
                 print('check_col')
                 if findCollision(C, 'sword_1'):
@@ -93,33 +100,37 @@ def simulationFollowPath(S, path, tau=0.01):
 
     simulationGoTo(S, path[-1], checkCol=True)
 
-def simulationWait(S, t, tau=0.01):
+def simulationWait(S, t, tau=0.01, render=True):
     for k in range(int(t / tau)):
-        time.sleep(tau)
         S.step([], tau, ry.ControlMode.none)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
 
-def simulationTorqueCtrl(S, t, torque, tau=0.01):
+def simulationTorqueCtrl(S, t, torque, tau=0.01, render=True):
     for k in range(int(t / tau)):
-        time.sleep(tau)
         S.step(torque, tau, ry.ControlMode.acceleration)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
 
-def simulationVelocityCtrl(S,t,vel,tau=0.01):
+def simulationVelocityCtrl(S,t,vel,tau=0.01, render=True):
     for k in range(int(t/tau)):
-        time.sleep(tau)
         S.step(vel,tau,ry.ControlMode.velocity)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
 
-def followInterpolatedPath(S,path,tau=0.01):
+def followInterpolatedPath(S,path,tau=0.01, render=True):
     checkColTime = 0.1
     timer = 0
     for i in range(len(path)):
-        time.sleep(tau)
         print(i)
         print(np.linalg.norm(S.get_q()- path[i]))
         S.step(path[i],tau,ry.ControlMode.position)
-        C.view()
+        if render:
+            C.view()
+            time.sleep(tau)
         timer += tau
         if timer > checkColTime:
             if findCollision(C,'sword_1'):
@@ -144,7 +155,7 @@ def findRewardingCollision(C,object1):
     
     
 # Use this code. It is awesome. It will follow the path and stop if there is a collision.    
-def followSplinePath(S,path,t,tau=0.01):
+def followSplinePath(S,path,t,tau=0.01, render=True):
     """
         Guides a simulation object along a specified spline path.
         Parameters:
@@ -169,10 +180,11 @@ def followSplinePath(S,path,t,tau=0.01):
     S.setSplineRef(path,np.linspace(0.01,t,len(path))) # Set new spline reference
     joint_data = np.empty((int(t/tau)+20, 2,S.get_q().shape[0])) # Initialize array to store joint data
     for k in range(int(t/tau)+20): # This +20 is heuristic. It was stopping after a short time when t was low.
-        time.sleep(tau)
         S.step([],tau,ry.ControlMode.spline)
-        C.view()
         timer += tau
+        if render:
+            C.view()
+            time.sleep(tau)
         inst_pos = S.get_q()
         inst_vel = S.get_qDot()
         joint_data[k,:,:] = [inst_pos,inst_vel]
@@ -185,18 +197,18 @@ def followSplinePath(S,path,t,tau=0.01):
     return joint_data[np.newaxis,:,:,:]
     #simulationGoTo(S,path[-1],checkCol=True) 
 
-def initalizeSimulation():
+def initalizeSimulation(render=True):
     C.setFrameState(initialFrameState)
     S = ry.Simulation(C, ry.SimulationEngine.physx, verbose=0)
     C.view()
-    simulationGoTo(S,armed)
-    simulationCloseGrippers(S)
-    simulationGoHome(S)
+    simulationGoTo(S,armed,render=render)
+    simulationCloseGrippers(S,render=render)
+    simulationGoHome(S,render=render)
     return S
 
 
 class RobotSimEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, render=False):
         super(RobotSimEnv, self).__init__()
         
         self.action_space = gym.spaces.Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973]), 
@@ -215,6 +227,8 @@ class RobotSimEnv(gym.Env):
         # Maximum steps per episode
         self.max_steps = 100
         self.current_steps = 0
+
+        self.renderAll = render
 
         self.simulation = initalizeSimulation()
 
@@ -246,7 +260,7 @@ class RobotSimEnv(gym.Env):
 
         if target is not None:
             # Calculate the distance to the target
-            distance_to_target = np.linalg.norm(self.state - target)
+            distance_to_target = np.linalg.norm(self.state - target)/10
 
             # Reward is the negative distance to the target
             reward = -distance_to_target
