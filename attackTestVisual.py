@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='PyTorch on TORCS with Multi-modal')
 
-    parser.add_argument('--mode', default='train', type=str, help='support option: train/test')
+    parser.add_argument('--mode', default='test', type=str, help='support option: train/test')
     parser.add_argument('--env', default='Pendulum-v0', type=str, help='open-ai gym environment')
     parser.add_argument('--hidden1', default=400, type=int, help='hidden num of first fully connect layer')
     parser.add_argument('--hidden2', default=300, type=int, help='hidden num of second fully connect layer')
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument('--ou_theta', default=0.15, type=float, help='noise theta')
     parser.add_argument('--ou_sigma', default=2, type=float, help='noise sigma') 
     parser.add_argument('--ou_mu', default=0, type=float, help='noise mu') 
-    parser.add_argument('--validate_episodes', default=10, type=int, help='how many episode to perform during validate experiment')
+    parser.add_argument('--validate_episodes', default=2, type=int, help='how many episode to perform during validate experiment')
     parser.add_argument('--max_episode_length', default=100, type=int, help='')
     parser.add_argument('--validate_steps', default=2000, type=int, help='how many steps to perform a validate experiment')
     parser.add_argument('--output', default='output', type=str, help='')
@@ -74,36 +74,10 @@ if __name__ == "__main__":
     agent = DDPG(nb_states, nb_actions, args)
     evaluate = Evaluator(args.validate_episodes, args.validate_steps, args.output, max_episode_length=args.max_episode_length)
 
-    for epoch in range(100):
-        mean_reward = 0
-        for episode in range(len(allPaths)):
-            path = allPaths[episode]
-            observation, info = env.reset(path[0],randomize=True)
-            if info == "failedReach":
-                continue
-            for i in range(len(path)-1):
-                if episode <= args.warmup:
-                    action = agent.random_action()
-                else:
-                    action = agent.select_action(observation)
-                
-                #print('action: ', action)
-                next_observation, reward, done, info = env.step(action, path[i+1])
-                #env.render()
-                agent.memory.append(observation, action, reward, done)
-                observation = next_observation
-                mean_reward += reward
+    agent.actor.load_state_dict(torch.load('output/actor.pkl'))
+    agent.critic.load_state_dict(torch.load('output/critic.pkl'))
 
-                if episode > args.warmup:
-                    agent.update_policy()
+    for path in allPaths:
+        meanTestReward = evaluate(env,agent,visualize=True,save=False, initial_state=path[0])
+        print(f"Mean test reward: {meanTestReward:.2f}")
 
-                if done:
-                    break
-        
-            if episode % 100 == 99:
-                print(f"Episode {1+episode} finished with mean reward {mean_reward/episode:.2f}")
-                agent.save_model(args.output)
-                meanTestReward = evaluate(env,agent)
-                print(f"Mean test reward: {meanTestReward:.2f}")
-
-        print(f"Epoch {epoch} finished with mean reward {mean_reward/len(allPaths):.2f}")

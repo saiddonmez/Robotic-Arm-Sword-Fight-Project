@@ -9,6 +9,7 @@ C.setJointState(np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  
        -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.]))
 
 
+
 initialFrameState = C.getFrameState()
 qhome = C.getJointState()
 q0 = qhome
@@ -55,11 +56,11 @@ def simulationGoTo(S, q, tau=0.01, checkCol=False, render=True):
 
         if timer > 2:
             print("Target cannot be reached within 2 seconds.")
-            break
+            return "failedReach"
         if checkCol:
             if timer > checkColTime:
                 if findCollision(C, 'sword_1'):
-                    return
+                    return "collision"
                 else:
                     checkColTime += 0.1
 
@@ -231,19 +232,26 @@ class RobotSimEnv(gym.Env):
         self.renderAll = render
         self.simulation = initializeSimulation(render=self.renderAll)
 
-    def reset(self, initial_state=None):
+    def reset(self, initial_state=None, randomize = False, seed=None):
         self.simulation = initializeSimulation(render=self.renderAll)
         """Reset the environment to an initial state."""
         self.current_steps = 0
         self.initial_state = initial_state
+        info = None
         if initial_state is not None:
-            simulationGoTo(self.simulation, initial_state[:14],render=self.renderAll)
+            info = simulationGoTo(self.simulation, initial_state[:14],render=self.renderAll)
             self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
         else:
             self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
-       -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
+        -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
+            if randomize == True:
+                if seed is not None:
+                    np.random.seed(seed)
+                q = 0.2*np.random.uniform(-np.pi, np.pi, size=self.state.shape[0])
+                q[14:] = 0
+                self.state += q
             self.initial_state = self.state
-        return self.state
+        return self.state, info
 
     def step(self, action, target=None):
         """Apply an action and return the new state, reward, done, and info."""
@@ -257,20 +265,21 @@ class RobotSimEnv(gym.Env):
         self.simulation.step(action, 0.01, ry.ControlMode.position)
         self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
 
+        reward = 0
+        
         if target is not None:
             # Calculate the distance to the target
             distance_to_target = np.linalg.norm(self.state - target)
 
             # Reward is the negative distance to the target
-            reward = -distance_to_target
+            reward -= distance_to_target
             #print("reward: ",reward)
         
+        # only give reward if sword collides with objects starting with r_
+        if findRewardingCollision(C, 'sword_1'):
+            reward += 10
         else:
-            # only give reward if sword collides with objects starting with r_
-            if findRewardingCollision(C, 'sword_1'):
-                reward = 1
-            else:
-                reward = 0
+            reward = 0
 
         # Check if the agent reached the target (within a small threshold)
         done = findCollision(C, 'sword_1')
