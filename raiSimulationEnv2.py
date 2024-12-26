@@ -40,26 +40,27 @@ class RobotSimEnv(gym.Env):
 
         #self.simulation = initializeSimulation(render=self.renderAll)
 
-    def reset(self, initial_state=None, randomize = False, seed=None):
+    def reset(self, randomize = False):
+        random_idx = np.random.randint(0, 1000)
+        self.realPath = np.load(f"real_spline_attackPaths/path_{random_idx}.npy")
+        path = np.load(f"attackPaths/path_{random_idx}.npy")
         self.initializeSimulation(render=self.renderAll)
         """Reset the environment to an initial state."""
         self.current_steps = 0
-        self.initial_state = initial_state
         info = None
-        if initial_state is not None:
-            info = self.simulationGoTo(initial_state[:14],render=self.renderAll)
-            self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
-        else:
+        info = self.simulationGoTo(path[0],render=self.renderAll)
+        self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
+        # else:
+        #     self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
+        # -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
+        if randomize == True:
             self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
         -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
-            if randomize == True:
-                if seed is not None:
-                    np.random.seed(seed)
-                q = 0.2*np.random.uniform(-np.pi, np.pi, size=self.state.shape[0])
-                q[14:] = 0
-                self.state += q
+            q = 0.2*np.random.uniform(-np.pi, np.pi, size=self.state.shape[0])
+            q[14:] = 0
+            self.state += q
             self.initial_state = self.state
-        return self.state, info
+        return self.state
 
     def step(self, action, target=None):
         """Apply an action and return the new state, reward, done, and info."""
