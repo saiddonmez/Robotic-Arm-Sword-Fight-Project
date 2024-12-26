@@ -54,7 +54,11 @@ class DDPG(object):
         self.epsilon = 1.0
         self.s_t = None # Most recent state
         self.a_t = None # Most recent action
-        self.is_training = True
+        if args.mode == 'test':
+            self.is_training = False
+            self.epsilon = 0.0
+        else:
+            self.is_training = True
 
         # 
         if USE_CUDA: self.cuda()
@@ -69,10 +73,10 @@ class DDPG(object):
             to_tensor(next_state_batch, volatile=True),
             self.actor_target(to_tensor(next_state_batch, volatile=True)),
         ])
-        next_q_values.volatile=False
+        next_q_values.requires_grad_(True)
 
         target_q_batch = to_tensor(reward_batch) + \
-            self.discount*to_tensor(terminal_batch.astype(np.float))*next_q_values
+            self.discount*to_tensor(terminal_batch.astype(np.float32))*next_q_values
 
         # Critic update
         self.critic.zero_grad()

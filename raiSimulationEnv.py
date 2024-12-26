@@ -8,7 +8,7 @@ C.addFile("rai-robotModels/scenarios/pandasFight.g")
 C.setJointState(np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
        -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.]))
 
-C.view()
+
 
 initialFrameState = C.getFrameState()
 qhome = C.getJointState()
@@ -56,11 +56,11 @@ def simulationGoTo(S, q, tau=0.01, checkCol=False, render=True):
 
         if timer > 2:
             print("Target cannot be reached within 2 seconds.")
-            break
+            return "failedReach"
         if checkCol:
             if timer > checkColTime:
                 if findCollision(C, 'sword_1'):
-                    return
+                    return "collision"
                 else:
                     checkColTime += 0.1
 
@@ -98,7 +98,7 @@ def simulationFollowPath(S, path, tau=0.01, render=True):
                 else:
                     checkColTime += 0.1
 
-    simulationGoTo(S, path[-1], checkCol=True)
+    simulationGoTo(S, path[-1], checkCol=True,render=render)
 
 def simulationWait(S, t, tau=0.01, render=True):
     for k in range(int(t / tau)):
@@ -137,7 +137,7 @@ def followInterpolatedPath(S,path,tau=0.01, render=True):
                 return
             else:
                 checkColTime += 0.1
-    simulationGoTo(S,path[-1],checkCol=True)
+    simulationGoTo(S,path[-1],checkCol=True,render=render)
 
 def findCollision(C,object1):
     collisions = [col for col in C.getCollisions(0) if object1 in col and not col[1].startswith('l_') and not col[0].startswith('l_')]
@@ -197,10 +197,11 @@ def followSplinePath(S,path,t,tau=0.01, render=True):
     return joint_data[np.newaxis,:,:,:]
     #simulationGoTo(S,path[-1],checkCol=True) 
 
-def initalizeSimulation(render=True):
+def initializeSimulation(render=True):
     C.setFrameState(initialFrameState)
     S = ry.Simulation(C, ry.SimulationEngine.physx, verbose=0)
-    C.view()
+    if render:
+        C.view()
     simulationGoTo(S,armed,render=render)
     simulationCloseGrippers(S,render=render)
     simulationGoHome(S,render=render)
@@ -216,8 +217,8 @@ class RobotSimEnv(gym.Env):
                                        dtype=np.float32)
         
         # Observation space: The agent's position in the 2D plane [x, y]
-        self.observation_space = gym.spaces.Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973,-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973, -9.70, -4.18, -8.32, -5.35, -5.96 ,-13.71, -6.12, -1.83, -2.05, -1.55, -1.45, -1.44, -0.44, -0.14, -9.70, -4.18, -8.32, -5.35, -5.96 ,-13.71, -6.12, -1.83, -2.05, -1.55, -1.45, -1.44, -0.44, -0.14]), 
-                                       high=np.array([2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.    ,  2.8973, 2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.    ,  2.8973, 9.34, 13.23, 10.33, 8.79, 6.37, 5.69, 5.11, 2.32, 0.87, 1.05, 1.26, 4.17, 0.40, 0.22,9.34, 13.23, 10.33, 8.79, 6.37, 5.69, 5.11, 2.32, 0.87, 1.05, 1.26, 4.17, 0.40, 0.22]), 
+        self.observation_space = gym.spaces.Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973,-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973, -9.70, -4.18, -8.32, -5.35, -5.96 ,-13.71, -6.12, -9.70, -4.18, -8.32, -5.35, -5.96 ,-13.71, -6.12]), 
+                                       high=np.array([2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.    ,  2.8973, 2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.    ,  2.8973, 9.34, 13.23, 10.33, 8.79, 6.37, 5.69, 5.11,9.34, 13.23, 10.33, 8.79, 6.37, 5.69, 5.11]), 
                                        dtype=np.float32)
         
         # Initial state
@@ -229,22 +230,28 @@ class RobotSimEnv(gym.Env):
         self.current_steps = 0
 
         self.renderAll = render
+        self.simulation = initializeSimulation(render=self.renderAll)
 
-        self.simulation = initalizeSimulation()
-
-    def reset(self, initial_state=None):
-        self.simulation = initalizeSimulation()
+    def reset(self, initial_state=None, randomize = False, seed=None):
+        self.simulation = initializeSimulation(render=self.renderAll)
         """Reset the environment to an initial state."""
         self.current_steps = 0
         self.initial_state = initial_state
+        info = None
         if initial_state is not None:
-            simulationGoTo(self.simulation, initial_state[:14])
+            info = simulationGoTo(self.simulation, initial_state[:14],render=self.renderAll)
             self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
         else:
             self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
-       -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
-        
-        return self.state
+        -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
+            if randomize == True:
+                if seed is not None:
+                    np.random.seed(seed)
+                q = 0.2*np.random.uniform(-np.pi, np.pi, size=self.state.shape[0])
+                q[14:] = 0
+                self.state += q
+            self.initial_state = self.state
+        return self.state, info
 
     def step(self, action, target=None):
         """Apply an action and return the new state, reward, done, and info."""
@@ -258,24 +265,25 @@ class RobotSimEnv(gym.Env):
         self.simulation.step(action, 0.01, ry.ControlMode.position)
         self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
 
+        reward = 0
+        
         if target is not None:
             # Calculate the distance to the target
-            distance_to_target = np.linalg.norm(self.state - target)/10
+            distance_to_target = np.linalg.norm(self.state - target)
 
             # Reward is the negative distance to the target
-            reward = -distance_to_target
-            print("reward: ",reward)
+            reward -= distance_to_target
+            #print("reward: ",reward)
         
+        # only give reward if sword collides with objects starting with r_
+        if findRewardingCollision(C, 'sword_1'):
+            reward += 10
         else:
-            # only give reward if sword collides with objects starting with r_
-            if findRewardingCollision(C, 'sword_1'):
-                reward = 1
-            else:
-                reward = 0
+            reward = 0
 
         # Check if the agent reached the target (within a small threshold)
         done = findCollision(C, 'sword_1')
-        print("done : ",done)
+        #print("done : ",done)
         # Info dictionary (optional)
         info = {}
         
