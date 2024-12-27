@@ -8,8 +8,8 @@ class RobotSimEnv(gym.Env):
     def __init__(self, render=False, render_mode= None):
         super(RobotSimEnv, self).__init__()
         
-        self.action_space = gym.spaces.Box(low=np.array([-1, -1, -1, -1, -1,  -1, -1]), 
-                                       high=np.array([1,  1,  1, 1, 1, 1, 1]), 
+        self.action_space = gym.spaces.Box(low=np.array([-0.5, -0.5, -0.5, -0.5, -0.5,  -0.5, -0.5]), 
+                                       high=np.array([0.5,  0.5,  0.5, 0.5, 0.5, 0.5, 0.5]), 
                                        dtype=np.float32)
         
         # Observation space: The agent's position in the 2D plane [x, y]
@@ -37,8 +37,12 @@ class RobotSimEnv(gym.Env):
         qhome = self.C.getJointState()
         self.q0 = qhome
         self.armed = np.load('armed.npy')
-        self.C.view()
+        #self.C.view()
+        self.minActions = np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973])
+        self.maxActions = np.array([ 2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.    ,  2.8973])
         #self.simulation = initializeSimulation(render=self.renderAll)
+        self.posNormalization = 6 # Kind of like 2*pi
+        self.speedNormalization = 10 # heuristic
 
     def reset(self, seed=23,randomize = False):
         # np.random.seed(seed)
@@ -51,14 +55,14 @@ class RobotSimEnv(gym.Env):
         self.current_steps = 0
         info = None
         info = self.simulationGoTo(path[0],render=self.renderAll)
-        self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
+        self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
         # else:
         #     self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
         # -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
         if randomize == True:
             self.state = np.array([ 0.  , -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0.  ,  0.  ,
-        -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
-            q = 0.2*np.random.uniform(-np.pi, np.pi, size=self.state.shape[0])
+        -1.  ,  0.  , -2.  ,  0.  ,  2.  ,  0., 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)/self.posNormalization
+            q = 0.2*np.random.uniform(-np.pi, np.pi, size=self.state.shape[0])/self.posNormalization
             q[14:] = 0
             self.state += q
             self.initial_state = self.state
@@ -69,18 +73,20 @@ class RobotSimEnv(gym.Env):
         actionAddition = action
         # Clip the action to ensure it stays within the action space bounds
         
-        action = self.state[:14]
+        action = self.state[:14]*self.posNormalization
         action[:7] += actionAddition
-        action[:7] = np.clip(action[:7], self.action_space.low, self.action_space.high)
+        #action[:7] = np.clip(action[:7], self.minActions, self.maxActions)
         # Update the state based on the action
         self.simulation.step(action, 0.01, ry.ControlMode.position)
-        self.state = np.concatenate([self.simulation.get_q(), self.simulation.get_qDot()])
+        self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
 
         reward = 0
         
         # Calculate the distance to the target
-        distance_to_target = np.max(self.state[:14] - self.realPath[min(self.current_steps,len(self.realPath)-1)][0][:14])
-        reward -= 0.1*distance_to_target
+        distance_to_target = np.linalg.norm(self.state[:14]*self.posNormalization - self.realPath[min(self.current_steps,len(self.realPath)-1)][0])
+        distance_to_speed = np.linalg.norm(self.state[14:]*self.speedNormalization - self.realPath[min(self.current_steps,len(self.realPath)-1)][1])
+        
+        reward -= distance_to_target #+ 0.001*np.linalg.norm(actionAddition)
         # Speed penalty
         #reward -= 0.1*np.linalg.norm(self.simulation.get_qDot())
         # only give reward if sword collides with objects starting with r_
@@ -90,8 +96,9 @@ class RobotSimEnv(gym.Env):
         success = False
         done = False
         swordFailedHit = False
+        truncated = False
         if self.current_steps >= len(self.realPath):
-            done = True
+            truncated = True
         # cols = self.C.getCollisions(-0.001)
         # for col in cols:
         #     if 'sword_1' in col:
@@ -119,7 +126,7 @@ class RobotSimEnv(gym.Env):
         self.current_steps += 1
         info= {"is_success": success, "self_collision": selfCollision, "sword_failed_hit": swordFailedHit}
         
-        return self.state, reward, done,False, info
+        return self.state, reward, done, truncated, info
 
     def render(self, mode='human'):
         """Render the environment (print the current state)."""
