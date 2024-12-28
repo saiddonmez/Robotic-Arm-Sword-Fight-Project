@@ -41,7 +41,7 @@ class RobotSimEnv(gym.Env):
         self.minActions = np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973,  0.5   , -2.8973])
         self.maxActions = np.array([ 2.8973,  1.7628,  2.8973, -0.0698,  2.8973,  3.    ,  2.8973])
         #self.simulation = initializeSimulation(render=self.renderAll)
-        self.posNormalization = 6 # Kind of like 2*pi
+        self.posNormalization = 1 # Kind of like 2*pi
         self.speedNormalization = 10 # heuristic
 
     def reset(self, seed=23,randomize = False):
@@ -86,7 +86,7 @@ class RobotSimEnv(gym.Env):
         distance_to_target = np.linalg.norm(self.state[:14]*self.posNormalization - self.realPath[min(self.current_steps,len(self.realPath)-1)][0])
         distance_to_speed = np.linalg.norm(self.state[14:]*self.speedNormalization - self.realPath[min(self.current_steps,len(self.realPath)-1)][1])
         
-        reward -= distance_to_target #+ 0.001*np.linalg.norm(actionAddition)
+        reward -= 0.1*distance_to_target + 0.1*distance_to_speed
         # Speed penalty
         #reward -= 0.1*np.linalg.norm(self.simulation.get_qDot())
         # only give reward if sword collides with objects starting with r_
@@ -99,24 +99,25 @@ class RobotSimEnv(gym.Env):
         truncated = False
         if self.current_steps >= len(self.realPath):
             truncated = True
-        # cols = self.C.getCollisions(-0.001)
-        # for col in cols:
-        #     if 'sword_1' in col:
-        #         if col[0].startswith('r_') or col[1].startswith('r_'):
-        #             reward += 1
-        #             success = True
-        #             done = True
-        #             break
-        #         else:
-        #             reward = -0.5
-        #             done = True
-        #             swordFailedHit = True
-        #             break
-        #     if col[0].startswith('l_') and col[1].startswith('l_'):
-        #         reward = -1
-        #         done = True
-        #         selfCollision = True
-        #         break
+            done = True
+        cols = self.C.getCollisions(-0.001)
+        for col in cols:
+            if 'sword_1' in col:
+                if col[0].startswith('r_') or col[1].startswith('r_'):
+                    reward += 1
+                    success = True
+                    done = True
+                    break
+                else:
+                    reward = -0.5
+                    done = True
+                    swordFailedHit = True
+                    break
+            if col[0].startswith('l_') and col[1].startswith('l_'):
+                reward = -1
+                done = True
+                selfCollision = True
+                break
 
 
         # Check if the agent reached the target (within a small threshold)
