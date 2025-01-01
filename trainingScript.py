@@ -64,21 +64,34 @@ class StaticOpponentWrapper(gym.Wrapper):
     """
     A wrapper for a 1v1 environment where one agent is controlled by a fixed, pre-trained policy.
     """
-    def __init__(self, env, static_policy,attacker=True):
+    def __init__(self, env, static_policy_attacker, static_policy_defender,staticAttacker=True,test=False):
         super(StaticOpponentWrapper, self).__init__(env)
-        self.static_policy = static_policy
-        self.attacker = attacker
+        self.static_policy_attacker = static_policy_attacker
+        self.static_policy_defender = static_policy_defender
+        self.staticAttacker = staticAttacker
+        self.test = test
+        self.initiallyObserved = False
 
     def step(self, action):
         # Get the static opponent's action
         obs = self.env.state  # Modify this based on how your env works
-        opponent_action, _ = self.static_policy.predict(obs, deterministic=True)
-
-        # Combine both actions into a joint action
-        if self.attacker:
-            joint_action = (opponent_action, action)
+        if not self.initialObserved:
+            self.initialObs = obs
+            self.initialObserved = True
+        if self.staticAttacker:
+            attacker_action, _ = self.static_policy_attacker.predict(self.initiallyObserved, deterministic=True)
         else:
-            joint_action = (action,opponent_action)
+            attacker_action, _ = self.static_policy_attacker.predict(obs, deterministic=True)
+        
+        defender_action, _ = self.static_policy_defender.predict(obs, deterministic=True)
+        # Combine both actions into a joint action
+        if self.staticAttacker:
+            joint_action = (attacker_action, action)
+        else:
+            joint_action = (action,defender_action)
+        
+        if self.test:
+            joint_action = (attacker_action, defender_action)
 
         # Step the environment with both actions
         obs, reward, done, truncated, info = self.env.step(joint_action)
@@ -99,9 +112,9 @@ callbacks = CallbackList([checkpoint_callback, reward_logger])
 env = RobotSimEnv(render_mode='human',staticAttacker=True)
 
 attackModel = PPO.load("sword_model_best")
+defenceModel = PPO.load("shield_model_best")
 
-wrapped_env = StaticOpponentWrapper(env, attackModel,attacker=True)
-
+wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,attacker=True)
 
 policy_kwargs = dict(
     net_arch=[dict(pi=[256, 256])]  # 'pi' is the actor network, 'vf' is the critic network

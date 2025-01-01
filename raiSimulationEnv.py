@@ -45,7 +45,7 @@ class RobotSimEnv(gym.Env):
         self.speedNormalization = 10 # heuristic
         self.random_idx_list = list(np.arange(1000))
 
-    def reset(self, seed=23,randomize = False):
+    def reset(self, seed=23,randomize = True):
         
         selectedPath = False
         while not selectedPath:
@@ -84,6 +84,7 @@ class RobotSimEnv(gym.Env):
             info = self.simulationGoTo(self.state[:14]*self.posNormalization,render=self.renderAll)
             self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
 
+        self.info = info
             #self.initial_state = self.state
         return self.state, None
 
@@ -161,7 +162,7 @@ class RobotSimEnv(gym.Env):
                     selfCollision = True
                     break
 
-        reward -= 0.001*np.linalg.norm(self.q0 - self.state[:7]*self.posNormalization)
+        reward -= 0.001*np.linalg.norm(self.q0[:7] - self.state[:7]*self.posNormalization)
 
         self.currentpathlen = self.realPath.shape[0]
         # Check if the agent reached the target (within a small threshold)

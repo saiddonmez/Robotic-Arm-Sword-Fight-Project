@@ -128,7 +128,7 @@ class RobotSimEnv(gym.Env):
         tempAction[:7] += actionAttackAddition
         tempAction[7:] += actionDefenseAddition
 
-        action = tempAction
+        action = np.clip(tempAction, np.concatenate([self.minActions,self.minActions]), np.concatenate([self.maxActions,self.maxActions]))
         # action = self.state[:14]*self.posNormalization
         # action[:7] += actionAttackAddition
         #action[:7] = np.clip(action[:7], self.minActions, self.maxActions)
@@ -218,7 +218,7 @@ class RobotSimEnv(gym.Env):
         info= {"is_success": success, "self_collision": selfCollision, "sword_failed_hit": swordFailedHit}
 
         if self.staticAttacker and self.staticDefender:
-            return self.state, [rewardAttacker, rewardDefender], done, truncated, info
+            return self.state, rewardAttacker+rewardDefender, done, truncated, info
         elif self.staticAttacker:
             return self.state, rewardDefender, done, truncated, info
         elif self.staticDefender:
