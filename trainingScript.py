@@ -75,11 +75,11 @@ class StaticOpponentWrapper(gym.Wrapper):
     def step(self, action):
         # Get the static opponent's action
         obs = self.env.state  # Modify this based on how your env works
-        if not self.initialObserved:
+        if not self.initiallyObserved:
             self.initialObs = obs
-            self.initialObserved = True
+            self.initiallyObserved = True
         if self.staticAttacker:
-            attacker_action, _ = self.static_policy_attacker.predict(self.initiallyObserved, deterministic=True)
+            attacker_action, _ = self.static_policy_attacker.predict(self.initialObs, deterministic=True)
         else:
             attacker_action, _ = self.static_policy_attacker.predict(obs, deterministic=True)
         
@@ -114,7 +114,7 @@ env = RobotSimEnv(render_mode='human',staticAttacker=True)
 attackModel = PPO.load("sword_model_best")
 defenceModel = PPO.load("shield_model_best")
 
-wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,attacker=True)
+wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True,test=False)
 
 policy_kwargs = dict(
     net_arch=[dict(pi=[256, 256])]  # 'pi' is the actor network, 'vf' is the critic network
