@@ -5,7 +5,7 @@ import robotic as ry
 
 
 class RobotSimEnv(gym.Env):
-    def __init__(self, render=False, render_mode= None, attackPolicy=None, defensePolicy=None):
+    def __init__(self, render=False, render_mode= None, attackPolicy=None, defensePolicy=None, staticAttacker=False, staticDefender=False):
         super(RobotSimEnv, self).__init__()
         
         self.action_space = gym.spaces.Box(low=np.array([-0.5, -0.5, -0.5, -0.5, -0.5,  -0.5, -0.5]), 
@@ -29,6 +29,9 @@ class RobotSimEnv(gym.Env):
 
         self.attackPolicy = attackPolicy
         self.defensePolicy = defensePolicy
+
+        self.staticAttacker = staticAttacker
+        self.staticDefender = staticDefender
 
         self.C = ry.Config()
         self.C.addFile("rai-robotModels/scenarios/pandasFight.g")
@@ -86,6 +89,7 @@ class RobotSimEnv(gym.Env):
             info = self.simulationGoTo(self.state[:14]*self.posNormalization,render=self.renderAll)
             self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
 
+        self.info = info
             #self.initial_state = self.state
         return self.state, None
 
@@ -96,27 +100,31 @@ class RobotSimEnv(gym.Env):
             return self.state, -10, False, True, {"is_success": False, "self_collision": False, "sword_failed_hit": False}
 
         tempAction = self.state[:14]*self.posNormalization
-        if self.attackPolicy is not None: # Keep the attack robot statioanry and train the defense robot
-            actionAttackAddition = self.attackPolicy(self.state, self.realPath, self.current_steps)
-        else:
-            actionAttackAddition = action
+        # if self.attackPolicy is not None: # Keep the attack robot statioanry and train the defense robot
+        #     actionAttackAddition = self.attackPolicy(self.state, self.realPath, self.current_steps)
+        # else:
+        #     actionAttackAddition = action
 
         
-        if self.defensePolicy is not None: # Keep the defense robot stationary and train the attack robot
-            actionDefenseAddition = self.defensePolicy(self.state, self.realPath, self.current_steps)
-        else:
-            actionDefenseAddition = action
+        # if self.defensePolicy is not None: # Keep the defense robot stationary and train the attack robot
+        #     actionDefenseAddition = self.defensePolicy(self.state, self.realPath, self.current_steps)
+        # else:
+        #     actionDefenseAddition = action
     
-        if self.attackPolicy is not None and self.defensePolicy is not None: # Use stationary policies for both robots
-            actionAttackAddition = self.attackPolicy(self.state, self.realPath, self.current_steps)
-            actionDefenseAddition = self.defensePolicy(self.state, self.realPath, self.current_steps)
+        # if self.attackPolicy is not None and self.defensePolicy is not None: # Use stationary policies for both robots
+        #     actionAttackAddition = self.attackPolicy(self.state, self.realPath, self.current_steps)
+        #     actionDefenseAddition = self.defensePolicy(self.state, self.realPath, self.current_steps)
 
-        if self.attackPolicy is None and self.defensePolicy is None:
-            # Assume that we want to train the attack policy and keep the defence robot in place
-            actionAttackAddition = action
-            actionDefenseAddition = np.zeros(7)
+        # if self.attackPolicy is None and self.defensePolicy is None:
+        #     # Assume that we want to train the attack policy and keep the defence robot in place
+        #     actionAttackAddition = action
+        #     actionDefenseAddition = np.zeros(7)
 
         # Clip the action to ensure it stays within the action space bounds
+
+        actionAttackAddition = action[0]
+        actionDefenseAddition = action[1]
+
         tempAction[:7] += actionAttackAddition
         tempAction[7:] += actionDefenseAddition
 
@@ -128,17 +136,17 @@ class RobotSimEnv(gym.Env):
         self.simulation.step(action, 0.01, ry.ControlMode.position)
         self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
 
-        reward = 0
-
+        rewardAttacker = 0
+        rewardDefender = 0
         # Calculate the distance to the target
         observation = self.state[:14]*self.posNormalization
-        observation = observation[np.newaxis, :]
-        distances_to_target = np.linalg.norm(observation - self.realPath,axis=1)
-        #find the minimum distance to the target and its index
-        min_index = np.argmin(distances_to_target)
-        self.current_steps = min_index
+        # observation = observation[np.newaxis, :]
+        # distances_to_target = np.linalg.norm(observation - self.realPath,axis=1)
+        # #find the minimum distance to the target and its index
+        # min_index = np.argmin(distances_to_target)
+        # self.current_steps = min_index
    
-        distance_to_target = distances_to_target[self.current_steps]
+        # distance_to_target = distances_to_target[self.current_steps]
         
         
         selfCollision = False
@@ -147,22 +155,22 @@ class RobotSimEnv(gym.Env):
         swordFailedHit = False
         truncated = False
 
-        if distance_to_target < 0.02:
-            self.achieved_step += min_index+1
-            reward += min_index
-            reward -= 0.1*np.linalg.norm(observation - self.hitting_point)
-            if self.current_steps < self.currentpathlen-1:
-                self.realPath = self.realPath[self.current_steps+1:]
-            else:
-                print('path ended')
-                truncated = True
-                self.realPath = self.realPath[self.current_steps:]
-        else:
-            reward -= 0.1*distance_to_target #+ 0.001*np.linalg.norm(actionAddition)
-            #reward -= 0.5*np.linalg.norm(observation - self.hitting_point)
+        # if distance_to_target < 0.02:
+        #     self.achieved_step += min_index+1
+        #     reward += min_index
+        #     reward -= 0.1*np.linalg.norm(observation - self.hitting_point)
+        #     if self.current_steps < self.currentpathlen-1:
+        #         self.realPath = self.realPath[self.current_steps+1:]
+        #     else:
+        #         print('path ended')
+        #         truncated = True
+        #         self.realPath = self.realPath[self.current_steps:]
+        # else:
+        #     reward -= 0.1*distance_to_target #+ 0.001*np.linalg.norm(actionAddition)
+        #     #reward -= 0.5*np.linalg.norm(observation - self.hitting_point)
         self.step_counter +=1 
-        #reward -= 0.5*np.linalg.norm(observation - self.hitting_point)
-
+        # #reward -= 0.5*np.linalg.norm(observation - self.hitting_point)
+        
         if self.step_counter == 200:
             truncated = True
 
@@ -170,24 +178,37 @@ class RobotSimEnv(gym.Env):
             cols = self.C.getCollisions(-0.001)
             for col in cols:
                 if 'sword_1' in col:
-                    if col[0].startswith('r_') or col[1].startswith('r_'):
-                        reward += 100
+                    if col[0].startswith('r_') or col[1].startswith('r_'): #sword hit the defender
+                        rewardAttacker += 1
+                        rewardDefender += -10
                         success = True
                         done = True
                         print("Success", col)
                         break
-                    else:
-                        reward = -1
+                    else: # sword hit something else
+                        if (col[0] == 'sword_1' and col[1] == 'shi') or (col[0] == 'shi' and col[1] == 'sword_1'):
+                            # sword hit the shield, reward the defender, punish the attacker
+                            rewardDefender += 2
+                            rewardAttacker += -2
+                        else:
+                            # sword hit something else, punish the attacker
+                            rewardAttacker += -1
                         #done = True
                         swordFailedHit = True
                         break
                 if col[0].startswith('l_') and col[1].startswith('l_'):
-                    reward = -1
+                    rewardAttacker += -1
                     #done = True
                     selfCollision = True
-                    break
 
-        reward -= 0.001*np.linalg.norm(self.homePos - self.state[:14]*self.posNormalization)
+                if col[0].startswith('r_') and col[1].startswith('r_'):
+                    rewardDefender += -1
+                    #done = True
+                    selfCollision = True
+
+        rewardAttacker -= 0.001*np.linalg.norm(self.q0[:7] - self.state[:7]*self.posNormalization)
+        rewardDefender -= 0.001*np.linalg.norm(self.q0[7:] - self.state[7:14]*self.posNormalization)
+
 
         self.currentpathlen = self.realPath.shape[0]
         # Check if the agent reached the target (within a small threshold)
@@ -195,7 +216,18 @@ class RobotSimEnv(gym.Env):
         #print("done : ",done)
         # Info dictionary (optional)
         info= {"is_success": success, "self_collision": selfCollision, "sword_failed_hit": swordFailedHit}
-        
+
+        if self.staticAttacker and self.staticDefender:
+            return self.state, [rewardAttacker, rewardDefender], done, truncated, info
+        elif self.staticAttacker:
+            return self.state, rewardDefender, done, truncated, info
+        elif self.staticDefender:
+            return self.state, rewardAttacker, done, truncated, info
+        else:
+            # error
+            raise ValueError("Both attacker and defender cannot be dynamic at the same time.")
+
+
         return self.state, reward, done, truncated, info
 
     def render(self, mode='human'):

@@ -151,17 +151,17 @@ class RobotSimEnv(gym.Env):
                         print("Success", col)
                         break
                     else:
-                        reward -= -1
+                        reward = -1
                         #done = True
                         swordFailedHit = True
                         break
                 if col[0].startswith('l_') and col[1].startswith('l_'):
-                    reward -= -1
+                    reward = -1
                     #done = True
                     selfCollision = True
                     break
 
-        reward -= 0.001*np.linalg.norm(self.q0 - self.state[:7]*self.posNormalization)
+        reward -= 0.001*np.linalg.norm(self.homePos - self.state[:14]*self.posNormalization)
 
         self.currentpathlen = self.realPath.shape[0]
         # Check if the agent reached the target (within a small threshold)
