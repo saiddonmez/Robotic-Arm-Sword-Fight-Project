@@ -49,6 +49,8 @@ class RobotSimEnv(gym.Env):
         self.posNormalization = np.pi # Kind of like 2*pi
         self.speedNormalization = 10 # heuristic
         self.random_idx_list = list(np.arange(1000))
+        self.attackSuccess = 0
+        self.defenceSuccess = 0
 
     def reset(self, seed=23,randomize = True):
         
@@ -90,37 +92,18 @@ class RobotSimEnv(gym.Env):
             self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
 
         self.info = info
+
             #self.initial_state = self.state
         return self.state, None
 
 
     def step(self, action):
         """Apply an action and return the new state, reward, done, and info."""
-        # if self.info == "failedReach":
-        #     return self.state, 0, False, True, {"is_success": False, "self_collision": False, "sword_failed_hit": False}
+        if self.info == "failedReach":
+            return self.state, 0, False, True, {"is_success": False, "self_collision": False, "sword_failed_hit": False}
 
         tempAction = self.state[:14]*self.posNormalization
-        # if self.attackPolicy is not None: # Keep the attack robot statioanry and train the defense robot
-        #     actionAttackAddition = self.attackPolicy(self.state, self.realPath, self.current_steps)
-        # else:
-        #     actionAttackAddition = action
 
-        
-        # if self.defensePolicy is not None: # Keep the defense robot stationary and train the attack robot
-        #     actionDefenseAddition = self.defensePolicy(self.state, self.realPath, self.current_steps)
-        # else:
-        #     actionDefenseAddition = action
-    
-        # if self.attackPolicy is not None and self.defensePolicy is not None: # Use stationary policies for both robots
-        #     actionAttackAddition = self.attackPolicy(self.state, self.realPath, self.current_steps)
-        #     actionDefenseAddition = self.defensePolicy(self.state, self.realPath, self.current_steps)
-
-        # if self.attackPolicy is None and self.defensePolicy is None:
-        #     # Assume that we want to train the attack policy and keep the defence robot in place
-        #     actionAttackAddition = action
-        #     actionDefenseAddition = np.zeros(7)
-
-        # Clip the action to ensure it stays within the action space bounds
 
         actionAttackAddition = action[0]
         actionDefenseAddition = action[1]
@@ -129,25 +112,14 @@ class RobotSimEnv(gym.Env):
         tempAction[7:] += actionDefenseAddition
 
         action = np.clip(tempAction, np.concatenate([self.minActions,self.minActions]), np.concatenate([self.maxActions,self.maxActions]))
-        # action = self.state[:14]*self.posNormalization
-        # action[:7] += actionAttackAddition
-        #action[:7] = np.clip(action[:7], self.minActions, self.maxActions)
-        # Update the state based on the action
+
         self.simulation.step(action, 0.01, ry.ControlMode.position)
         self.state = np.concatenate([self.simulation.get_q()/self.posNormalization, self.simulation.get_qDot()/self.speedNormalization])
 
         rewardAttacker = 0
         rewardDefender = 0
-        # Calculate the distance to the target
         observation = self.state[:14]*self.posNormalization
-        # observation = observation[np.newaxis, :]
-        # distances_to_target = np.linalg.norm(observation - self.realPath,axis=1)
-        # #find the minimum distance to the target and its index
-        # min_index = np.argmin(distances_to_target)
-        # self.current_steps = min_index
-   
-        # distance_to_target = distances_to_target[self.current_steps]
-        
+
         
         selfCollision = False
         success = False
@@ -171,24 +143,27 @@ class RobotSimEnv(gym.Env):
         self.step_counter +=1 
         # #reward -= 0.5*np.linalg.norm(observation - self.hitting_point)
         
-        if self.step_counter == 100:
+        if self.step_counter == 60:
             truncated = True
+            self.defenceSuccess += 1
+            done = True
 
         if self.step_counter > 5:
             cols = self.C.getCollisions(-0.02)
             for col in cols:
                 if 'sword_1' in col:
                     if col[0].startswith('r_') or col[1].startswith('r_'): #sword hit the defender
-                        rewardAttacker += 20*(max(self.C.getFrame("sword_1").getPosition()[2] - 0.9,0))
-                        rewardDefender += -100
+                        rewardAttacker += 10
+                        rewardDefender += -10
                         success = True
                         done = True
-                        print("Success", col)
+                        #print("Success", col)
+                        self.attackSuccess += 1
                         break
                     else: # sword hit something else
                         if (col[0] == 'sword_1' and col[1] == 'shi') or (col[0] == 'shi' and col[1] == 'sword_1'):
                             # sword hit the shield, reward the defender, punish the attacker
-                            rewardDefender += 5
+                            rewardDefender += 2
                             rewardAttacker += -2
                         else:
                             # sword hit something else, punish the attacker
@@ -196,30 +171,28 @@ class RobotSimEnv(gym.Env):
                         #done = True
                         swordFailedHit = True
                 if col[0].startswith('l_') and col[1].startswith('l_'):
-                    rewardAttacker += -3 # self collision of attacker
+                    rewardAttacker += -1 # self collision of attacker
                     #done = True
                     selfCollision = True
 
                 if col[0].startswith('r_') and col[1].startswith('r_'):
-                    rewardDefender += -3 # self collision of defender
+                    rewardDefender += -1 # self collision of defender
                     #done = True
                     selfCollision = True
                 if 'shi' in col:
                     if col[0].startswith('r_') or col[1].startswith('r_'):
                         rewardDefender += -1 # shield collision with defender
 
-        rewardAttacker -= 0.1*np.linalg.norm(self.q0[:7] - self.state[:7]*self.posNormalization)
-        rewardDefender -= 0.1*np.linalg.norm(self.q0[7:] - self.state[7:14]*self.posNormalization)
+        rewardAttacker -= 0.02*np.linalg.norm(self.q0[:7] - self.state[:7]*self.posNormalization)
+        rewardDefender -= 0.02*np.linalg.norm(self.q0[7:] - self.state[7:14]*self.posNormalization)
 
-        swordPos = self.C.getFrame("sword_1").getPosition() 
-        shieldPos = self.C.getFrame("shi").getPosition()
-        shieldToSwordVec = swordPos - shieldPos
+        shieldToSwordVec = self.C.getFrame("sword_1").getPosition() - self.C.getFrame("shi").getPosition()
         shieldZ = -self.C.getFrame("shi").getRotationMatrix()[:,2]
 
-        rewardDefender += 0.1*np.dot(shieldToSwordVec, shieldZ)
-        rewardDefender += -np.linalg.norm(shieldToSwordVec)
+        rewardDefender += np.dot(shieldToSwordVec, shieldZ)
+        rewardDefender += -0.2*np.linalg.norm(shieldToSwordVec)
 
-        if self.C.getFrame("shi").getPosition()[0] > 0.6:
+        if self.C.getFrame("shi").getPosition()[0] > 1:
             rewardDefender += -1
 
         self.currentpathlen = self.realPath.shape[0]
@@ -244,8 +217,8 @@ class RobotSimEnv(gym.Env):
 
     def render(self, mode='human'):
         """Render the environment (print the current state)."""
-        self.C.view()
-        time.sleep(0.01)
+        self.C.view(message=f"Attacker Score: {self.attackSuccess}, Defender Score: {self.defenceSuccess}")
+        time.sleep(0.02)
 
     def close(self):
         """Clean up resources (optional)."""
@@ -293,7 +266,7 @@ class RobotSimEnv(gym.Env):
                 time.sleep(tau)
 
             if timer > 2:
-                print("Target cannot be reached within 2 seconds.")
+                #print("Target cannot be reached within 2 seconds.")
                 return "failedReach"
             if checkCol:
                 if timer > checkColTime:
