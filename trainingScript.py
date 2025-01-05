@@ -81,12 +81,7 @@ class StaticOpponentWrapper(gym.Wrapper):
             self.initialObs = obs
             self.initiallyObserved = True
         if self.staticAttacker:
-<<<<<<< HEAD
             attacker_action, _ = self.static_policy_attacker.predict(self.initialObs, deterministic=True)
-=======
-            #attacker_action, _ = self.static_policy_attacker.predict(self.initialObs, deterministic=True)
-            attacker_action, _ = self.static_policy_attacker.predict(obs, deterministic=True)
->>>>>>> 3ec0f74 (final)
         else:
             attacker_action, _ = self.static_policy_attacker.predict(obs, deterministic=True)
         
@@ -183,14 +178,7 @@ model2 = torch.load("defence_model_imitation_posdif.pth")
 # defenceModel.policy.value_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["value_out.weight","value_out.bias"]),{"value_out.weight":"weight","value_out.bias":"bias"}))
 # defenceModel.policy.action_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["action_net.weight","action_net.bias"]),{"action_net.weight":"weight","action_net.bias":"bias"}))
 
-<<<<<<< HEAD
 wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True,test=False)
-=======
-if trainAttacker:
-    wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=False)
-else:
-    wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True)
->>>>>>> 3ec0f74 (final)
 
 if trainAttacker:
     #model = PPO.load("best_sword_model", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
