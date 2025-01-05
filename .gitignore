@@ -4,3 +4,4 @@
 *.pth
 *.pyc
 *.out
+*.log
