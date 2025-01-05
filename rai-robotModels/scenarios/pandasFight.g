@@ -33,7 +33,7 @@ sword_0 (table):{
     size: [0.1, .03, 0.03, 0.001],
     joint: rigid,
     Q: "t(-0.5 0.4 0.08) d(90 0 0 1)",
-    mass: 0.1,
+    mass: 0.2,
     contact:1,
     color: [0.05, 0.05, 0.05,1]
     }
@@ -44,8 +44,7 @@ sword_1 (sword_0):{
     Q: "t(0.25 0 0)",
     mass: 0.1,
     contact: 1,
-    color: [0.05, 0.05, 0.05,1],
-    'restitution': 0.4
+    color: [0.05, 0.05, 0.05,1]
 }
 
 sword_2 (sword_0):{
@@ -65,13 +64,12 @@ sword_3 (sword_0):{
     color: [0.05, 0.05, 0.05,1]}
 
 
-shi(table): { shape: ssCylinder, size: [0.02, 0.17,0.01],    
+shi(table): { shape: ssCylinder, size: [0.02, 0.18,0.01],    
     mass: 0.1, 
     joint: rigid, 
     Q: "t(0.5 0.6 0.07) d(180 0 0 1)",
     contact: 1, 
-    color: [0.36, 0.20, 0.20,1],
-    'restitution':0.5
+    color: [0.36, 0.20, 0.20,1]    
     }
 
 shi-h1(shi): { shape: ssBox, size: [0.01, 0.091, 0.05, 0.001],    

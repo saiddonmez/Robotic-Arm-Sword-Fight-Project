@@ -9,6 +9,8 @@ import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3 import PPO
 import gymnasium as gym
+from collections import OrderedDict
+import torch
 
 class RewardLoggerCallback(BaseCallback):
     def __init__(self, log_file: str, verbose: int = 0):
@@ -100,29 +102,105 @@ class StaticOpponentWrapper(gym.Wrapper):
     def reset(self, **kwargs):
         return self.env.reset(**kwargs)
 
+def update_ordered_dict_keys(ordered_dict, key_mapping):
+    """
+    Update keys in an OrderedDict based on a key mapping dictionary.
+
+    Args:
+        ordered_dict (OrderedDict): The OrderedDict to update.
+        key_mapping (dict): A dictionary where keys are the old keys to be replaced,
+                            and values are the new keys.
+
+    Returns:
+        OrderedDict: A new OrderedDict with updated keys.
+    """
+    updated_dict = OrderedDict()
+
+    for old_key, value in ordered_dict.items():
+        # Use the new key if it exists in the key_mapping, otherwise keep the old key
+        new_key = key_mapping.get(old_key, old_key)
+        updated_dict[new_key] = value
+
+    return updated_dict
+
+def delete_values_from_ordered_dict(ordered_dict, keys_to_delete):
+    """
+    Create a new OrderedDict with specific keys removed.
+
+    Args:
+        ordered_dict (OrderedDict): The original OrderedDict.
+        keys_to_delete (list): A list of keys to be removed.
+
+    Returns:
+        OrderedDict: A new OrderedDict with specified keys removed.
+    """
+    return OrderedDict((key, value) for key, value in ordered_dict.items() if key not in keys_to_delete)
+
+
+def select_keys(ordered_dict, keys):
+    """
+    Select specific keys from an OrderedDict and return a new OrderedDict with only the selected keys.
+
+    Parameters:
+        ordered_dict (OrderedDict): The original OrderedDict.
+        keys (list): List of keys to select from the OrderedDict.
+
+    Returns:
+        OrderedDict: A new OrderedDict containing only the selected keys.
+    """
+    return OrderedDict((key, ordered_dict[key]) for key in keys if key in ordered_dict)
+
+
+trainAttacker = False # False means train defender.
 # Usage
 checkpoint_callback = CustomCheckpointCallback(
     save_freq=100000, save_path='./checkpoints/', verbose=1
 )
-reward_logger = RewardLoggerCallback(log_file="rewards_log_2M_trial1.csv")
+if trainAttacker:
+    reward_logger = RewardLoggerCallback(log_file="rewards_log_attacker_iterative.csv")
+else:
+    reward_logger = RewardLoggerCallback(log_file="rewards_log_defender_iterative.csv")
 
 callbacks = CallbackList([checkpoint_callback, reward_logger])
+policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
 
+if trainAttacker:
+    env = RobotSimEnv(render_mode='human',staticDefender=True,staticAttacker=False)
+else:
+    env = RobotSimEnv(render_mode='human',staticDefender=False,staticAttacker=True)
 
-env = RobotSimEnv(render_mode='human',staticAttacker=True)
+attackModel = PPO.load("best_sword_model")
+#defenceModel = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=0)
+defenceModel = PPO.load("best_shield_model")
 
-attackModel = PPO.load("sword_model_best")
-defenceModel = PPO.load("shield_model_best")
+model2 = torch.load("defence_model_imitation_posdif.pth")
+# defenceModel.policy.mlp_extractor.load_state_dict(delete_values_from_ordered_dict(model2,["action_net.weight","action_net.bias","value_out.weight","value_out.bias"]))
+# defenceModel.policy.value_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["value_out.weight","value_out.bias"]),{"value_out.weight":"weight","value_out.bias":"bias"}))
+# defenceModel.policy.action_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["action_net.weight","action_net.bias"]),{"action_net.weight":"weight","action_net.bias":"bias"}))
 
 wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True,test=False)
 
-policy_kwargs = dict(
-    net_arch=[dict(pi=[256, 256])]  # 'pi' is the actor network, 'vf' is the critic network
-)
+if trainAttacker:
+    #model = PPO.load("best_sword_model", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
+    model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
+    model.policy.load_state_dict(attackModel.policy.state_dict())
+else:
+    model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
+    model.policy.load_state_dict(defenceModel.policy.state_dict())
+    #model2 = torch.load("defence_model_imitation_posdif.pth")
+    # model.policy.mlp_extractor.load_state_dict(delete_values_from_ordered_dict(model2,["action_net.weight","action_net.bias","value_out.weight","value_out.bias"]))
+    # #model.policy.value_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["value_out.weight","value_out.bias"]),{"value_out.weight":"weight","value_out.bias":"bias"}))
+    # model.policy.action_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["action_net.weight","action_net.bias"]),{"action_net.weight":"weight","action_net.bias":"bias"}))
 
-model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')   
+#model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')   
 #model = SAC("MlpPolicy", env, verbose=0)   
 
-model.learn(total_timesteps=100000, callback=callbacks)
+model.learn(total_timesteps=200000, callback=callbacks)
 
-model.save("ppo_100k_defense_trial1")
+if trainAttacker:
+    model.save("ppo_200k_attack_trial5")
+    model.save("best_sword_model")
+else:
+    model.save("ppo_200k_defence_trial5")
+    model.save("best_defence_model")
+

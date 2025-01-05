@@ -1,3 +1,7 @@
 *.global
 *.zip
 *.csv
+*.pth
+*.pyc
+*.out
+*.log
