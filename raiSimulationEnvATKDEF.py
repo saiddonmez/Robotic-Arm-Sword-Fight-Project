@@ -96,8 +96,8 @@ class RobotSimEnv(gym.Env):
 
     def step(self, action):
         """Apply an action and return the new state, reward, done, and info."""
-        if self.info == "failedReach":
-            return self.state, -10, False, True, {"is_success": False, "self_collision": False, "sword_failed_hit": False}
+        # if self.info == "failedReach":
+        #     return self.state, 0, False, True, {"is_success": False, "self_collision": False, "sword_failed_hit": False}
 
         tempAction = self.state[:14]*self.posNormalization
         # if self.attackPolicy is not None: # Keep the attack robot statioanry and train the defense robot
@@ -171,16 +171,16 @@ class RobotSimEnv(gym.Env):
         self.step_counter +=1 
         # #reward -= 0.5*np.linalg.norm(observation - self.hitting_point)
         
-        if self.step_counter == 200:
+        if self.step_counter == 100:
             truncated = True
 
         if self.step_counter > 5:
-            cols = self.C.getCollisions(-0.001)
+            cols = self.C.getCollisions(-0.02)
             for col in cols:
                 if 'sword_1' in col:
                     if col[0].startswith('r_') or col[1].startswith('r_'): #sword hit the defender
-                        rewardAttacker += 1
-                        rewardDefender += -10
+                        rewardAttacker += 20*(max(self.C.getFrame("sword_1").getPosition()[2] - 0.9,0))
+                        rewardDefender += -100
                         success = True
                         done = True
                         print("Success", col)
@@ -188,27 +188,39 @@ class RobotSimEnv(gym.Env):
                     else: # sword hit something else
                         if (col[0] == 'sword_1' and col[1] == 'shi') or (col[0] == 'shi' and col[1] == 'sword_1'):
                             # sword hit the shield, reward the defender, punish the attacker
-                            rewardDefender += 2
+                            rewardDefender += 5
                             rewardAttacker += -2
                         else:
                             # sword hit something else, punish the attacker
                             rewardAttacker += -1
                         #done = True
                         swordFailedHit = True
-                        break
                 if col[0].startswith('l_') and col[1].startswith('l_'):
-                    rewardAttacker += -1
+                    rewardAttacker += -3 # self collision of attacker
                     #done = True
                     selfCollision = True
 
                 if col[0].startswith('r_') and col[1].startswith('r_'):
-                    rewardDefender += -1
+                    rewardDefender += -3 # self collision of defender
                     #done = True
                     selfCollision = True
+                if 'shi' in col:
+                    if col[0].startswith('r_') or col[1].startswith('r_'):
+                        rewardDefender += -1 # shield collision with defender
 
-        rewardAttacker -= 0.001*np.linalg.norm(self.q0[:7] - self.state[:7]*self.posNormalization)
-        rewardDefender -= 0.001*np.linalg.norm(self.q0[7:] - self.state[7:14]*self.posNormalization)
+        rewardAttacker -= 0.1*np.linalg.norm(self.q0[:7] - self.state[:7]*self.posNormalization)
+        rewardDefender -= 0.1*np.linalg.norm(self.q0[7:] - self.state[7:14]*self.posNormalization)
 
+        swordPos = self.C.getFrame("sword_1").getPosition() 
+        shieldPos = self.C.getFrame("shi").getPosition()
+        shieldToSwordVec = swordPos - shieldPos
+        shieldZ = -self.C.getFrame("shi").getRotationMatrix()[:,2]
+
+        rewardDefender += 0.1*np.dot(shieldToSwordVec, shieldZ)
+        rewardDefender += -np.linalg.norm(shieldToSwordVec)
+
+        if self.C.getFrame("shi").getPosition()[0] > 0.6:
+            rewardDefender += -1
 
         self.currentpathlen = self.realPath.shape[0]
         # Check if the agent reached the target (within a small threshold)

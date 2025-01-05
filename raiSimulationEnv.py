@@ -152,12 +152,12 @@ class RobotSimEnv(gym.Env):
                         print("Success", col)
                         break
                     else:
-                        reward -= -1
+                        reward -= 1
                         #done = True
                         swordFailedHit = True
                         break
                 if col[0].startswith('l_') and col[1].startswith('l_'):
-                    reward -= -1
+                    reward -= 1
                     #done = True
                     selfCollision = True
                     break

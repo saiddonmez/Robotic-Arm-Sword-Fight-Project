@@ -81,12 +81,8 @@ class StaticOpponentWrapper(gym.Wrapper):
             self.initialObs = obs
             self.initiallyObserved = True
         if self.staticAttacker:
-<<<<<<< HEAD
-            attacker_action, _ = self.static_policy_attacker.predict(self.initialObs, deterministic=True)
-=======
             #attacker_action, _ = self.static_policy_attacker.predict(self.initialObs, deterministic=True)
             attacker_action, _ = self.static_policy_attacker.predict(obs, deterministic=True)
->>>>>>> 3ec0f74 (final)
         else:
             attacker_action, _ = self.static_policy_attacker.predict(obs, deterministic=True)
         
@@ -155,64 +151,62 @@ def select_keys(ordered_dict, keys):
     """
     return OrderedDict((key, ordered_dict[key]) for key in keys if key in ordered_dict)
 
+NoIterations = 1
+attackerTrainingSteps = 100000
+defenderTrainingSteps = 500000
+#trainAttacker = True # False means train defender.
+for k in range(NoIterations):
+    if k % 2 == 1:
+        trainAttacker = True
+    else:
+        trainAttacker = False
+    # Usage
+    checkpoint_callback = CustomCheckpointCallback(
+        save_freq=100000, save_path='./checkpoints/', verbose=1
+    )
+    if trainAttacker:
+        reward_logger = RewardLoggerCallback(log_file="rewards_log_attacker_iterative.csv")
+    else:
+        reward_logger = RewardLoggerCallback(log_file="rewards_log_defender_iterative.csv")
 
-trainAttacker = False # False means train defender.
-# Usage
-checkpoint_callback = CustomCheckpointCallback(
-    save_freq=100000, save_path='./checkpoints/', verbose=1
-)
-if trainAttacker:
-    reward_logger = RewardLoggerCallback(log_file="rewards_log_attacker_iterative.csv")
-else:
-    reward_logger = RewardLoggerCallback(log_file="rewards_log_defender_iterative.csv")
+    callbacks = CallbackList([checkpoint_callback, reward_logger])
+    policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
 
-callbacks = CallbackList([checkpoint_callback, reward_logger])
-policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
+    if trainAttacker:
+        env = RobotSimEnv(render_mode='human',staticDefender=True,staticAttacker=False)
+    else:
+        env = RobotSimEnv(render_mode='human',staticDefender=False,staticAttacker=True)
 
-if trainAttacker:
-    env = RobotSimEnv(render_mode='human',staticDefender=True,staticAttacker=False)
-else:
-    env = RobotSimEnv(render_mode='human',staticDefender=False,staticAttacker=True)
+    attackModel = PPO.load("best_sword_model")
+    defenceModel = PPO.load("best_shield_model")
 
-attackModel = PPO.load("best_sword_model")
-#defenceModel = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=0)
-defenceModel = PPO.load("best_shield_model")
+    if trainAttacker:
+        wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=False)
+    else:
+        wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True)
 
-model2 = torch.load("defence_model_imitation_posdif.pth")
-# defenceModel.policy.mlp_extractor.load_state_dict(delete_values_from_ordered_dict(model2,["action_net.weight","action_net.bias","value_out.weight","value_out.bias"]))
-# defenceModel.policy.value_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["value_out.weight","value_out.bias"]),{"value_out.weight":"weight","value_out.bias":"bias"}))
-# defenceModel.policy.action_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["action_net.weight","action_net.bias"]),{"action_net.weight":"weight","action_net.bias":"bias"}))
+    if trainAttacker:
+        model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
+        model.policy.load_state_dict(attackModel.policy.state_dict())
+    else:
+        model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
+        model.policy.load_state_dict(defenceModel.policy.state_dict())  
+    #model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')   
+    #model = SAC("MlpPolicy", env, verbose=0)   
 
-<<<<<<< HEAD
-wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True,test=False)
-=======
-if trainAttacker:
-    wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=False)
-else:
-    wrapped_env = StaticOpponentWrapper(env, attackModel,defenceModel,staticAttacker=True)
->>>>>>> 3ec0f74 (final)
+    if trainAttacker:
+        NoTrainingSteps = attackerTrainingSteps
+    else:
+        NoTrainingSteps = defenderTrainingSteps
 
-if trainAttacker:
-    #model = PPO.load("best_sword_model", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
-    model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
-    model.policy.load_state_dict(attackModel.policy.state_dict())
-else:
-    model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')
-    model.policy.load_state_dict(defenceModel.policy.state_dict())
-    #model2 = torch.load("defence_model_imitation_posdif.pth")
-    # model.policy.mlp_extractor.load_state_dict(delete_values_from_ordered_dict(model2,["action_net.weight","action_net.bias","value_out.weight","value_out.bias"]))
-    # #model.policy.value_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["value_out.weight","value_out.bias"]),{"value_out.weight":"weight","value_out.bias":"bias"}))
-    # model.policy.action_net.load_state_dict(update_ordered_dict_keys(select_keys(model2,["action_net.weight","action_net.bias"]),{"action_net.weight":"weight","action_net.bias":"bias"}))
+    model.learn(total_timesteps=NoTrainingSteps, callback=callbacks)
 
-#model = PPO("MlpPolicy", wrapped_env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')   
-#model = SAC("MlpPolicy", env, verbose=0)   
+    if trainAttacker:
+        model.save(f"Iterative_attack_trial_{k}")
+        model.save("best_sword_model")
+    else:
+        model.save(f"Iterative_defence_trial_{k}")
+        model.save("best_shield_model")
 
-model.learn(total_timesteps=200000, callback=callbacks)
-
-if trainAttacker:
-    model.save("ppo_200k_attack_trial5")
-    model.save("best_sword_model")
-else:
-    model.save("ppo_200k_defence_trial5")
-    model.save("best_defence_model")
-
+    env.close()
+    #model.env.close()

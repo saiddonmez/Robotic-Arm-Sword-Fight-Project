@@ -71,9 +71,8 @@ callbacks = CallbackList([checkpoint_callback, reward_logger])
 
 env = RobotSimEnv(render_mode='human')
 
-policy_kwargs = dict(
-    net_arch=[dict(pi=[256, 256])]  # 'pi' is the actor network, 'vf' is the critic network
-)
+policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
+
 
 model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=0, device='cpu')   
 #model = SAC("MlpPolicy", env, verbose=0)   
